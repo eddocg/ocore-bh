@@ -57,7 +57,7 @@ async function addAA(aa) {
 
 async function inspectNormalCreationInputs() {
 	const wallets = await db.query('SELECT wallet FROM wallets ORDER BY wallet');
-	const myAddresses = await db.query('SELECT address, wallet, account, is_change, address_index, definition FROM my_addresses ORDER BY address');
+	const myAddresses = await db.query('SELECT * FROM my_addresses ORDER BY address');
 	const spendableOutputs = await db.query(
 		`SELECT outputs.unit, outputs.message_index, outputs.output_index, outputs.address, outputs.amount
 		FROM outputs
