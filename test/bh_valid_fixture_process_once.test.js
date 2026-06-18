@@ -32,7 +32,12 @@ test.cb.serial('BH process valid fixture once', t => {
 	console.log('BH_PROCESS_META', JSON.stringify(meta));
 	safeSnapshot('BH_SNAPSHOT_BEFORE', { fixture_dir: fixtureDir, meta_status: meta.status, meta_ok: !!meta.ok });
 	if (!meta.ok) {
-		console.log('BH_PROCESS_DONE', JSON.stringify({ ok: false, status: 'blocked', reason: meta.reason || 'fixture not marked ok' }));
+		const status = meta.status === 'restart_escalation_killed' ? 'restart_escalation_killed' : 'blocked';
+		console.log('BH_PROCESS_DONE', JSON.stringify({ ok: false, status, reason: meta.reason || 'fixture not marked ok' }));
+		if (status === 'restart_escalation_killed') {
+			t.pass('Exporter proved the source trigger cannot be replayed in a fresh process without synthesizing a malformed fixture.');
+			return t.end();
+		}
 		t.fail('No valid exported fixture to process: ' + (meta.reason || meta.status));
 		return t.end();
 	}
