@@ -22,3 +22,57 @@
 | `aa_triggers` | Pending triggers survive crash before delete; startup processes leftovers | Yes if fixture valid | No | Yes | Pending | Pending | Not attempted | None | High for restart loop/delayed processing | Needs valid fresh fixture |
 | `writer.js` saved-unit side effects | Writer mutates SQL, cache, `assocUnstableMessages`, AA definitions, and kvstore batch inside outer AA tx | Yes | No | Yes | Pending | Pending | Not attempted | None | High if cleanup incomplete | Core root-cause mechanism |
 | `main_chain.js` MC recalculation side effects | Saving response units can call main-chain update/cache mutation in writer; rollback may not reset all memory state | Yes | No | Yes | Pending | Pending | Not attempted | None | Medium/High if props diverge | Candidate contributor to known mismatch |
+# AA rollback cache crash escalation gate result
+
+## Result
+
+FINAL=RESTART_LOOP_KILLED_CURRENT_EVIDENCE
+
+## Proven
+
+The direct diagnostic AA rollback/cache primitive still reproduces:
+
+- primary AA response mutates in-memory unit/main-chain props
+- secondary AA bounces
+- primary response is rolled back to SAVEPOINT initial_balances
+- final bounce save reaches stale unit props
+- node crashes with storage/readUnitProps mismatch
+
+Observed signature:
+
+different props of rH7MSOd/uA7tJrYuC2aLOunkeLQugEemr7G7otbOdfk=
+mem main_chain_index=null,is_on_main_chain=0
+db  main_chain_index=13,is_on_main_chain=1
+
+## Killed
+
+The restart/network escalation is killed under current evidence.
+
+The known direct primitive uses:
+- direct handleTrigger()
+- an in-memory trigger object
+- a fake SQL output on an existing canonical MC unit
+
+The fresh-process replay path is not valid because handleAATriggers() reconstructs the trigger from canonical unit messages, and the canonical trigger unit does not actually contain a payment output to the newly-created primary AA.
+
+## Invalid paths rejected
+
+The following are not acceptable impact bridges:
+
+- appending SQL outputs to an existing unit
+- mutating canonical unit data after the fact
+- synthetic trigger units
+- direct handleTrigger() as network/restart evidence
+- signature bypass
+- fabricated writer state
+
+## Current severity position
+
+No network-level DoS claim.
+
+No restart-loop claim.
+
+No Medium/High/Critical severity claim.
+
+The remaining value is root-cause engineering evidence and possible upstream robustness/fix discussion, not bounty-grade impact.
+
