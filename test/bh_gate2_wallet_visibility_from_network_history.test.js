@@ -25,7 +25,7 @@ desktop_app.getAppDataDir = function () {
  * Replace these after bh_gate2_scan_wallet_candidate_fixtures.sh returns a candidate.
  */
 const SOURCE_FIXTURE_DIR = 'test/.testdata-bh_asset_rollback_persistent.test.js';
-const TARGET_TRIGGER_UNIT = 'bsKDooBCUYyoxddKUoGp1NUyKycrIcdVGfq3+77xWBc=';
+const TARGET_TRIGGER_UNIT = 'BvD/g11loi9UMjpWHT3g9zA391rkQHBSjtD+cRHU92U=';
 const TARGET_AA_ADDRESS = 'GAZXTJRNXT6YYMUOKN76RTZQ23NO223W';
 
 const dstDir = __dirname + '/.testdata-' + path.basename(__filename);
@@ -38,6 +38,7 @@ const storage = require('../storage.js');
 const light = require('../light.js');
 const network = require('../network.js');
 const eventBus = require('../event_bus.js');
+const wallet = require('../wallet.js');
 const test = require('ava');
 const WebSocket = require('ws');
 
@@ -50,6 +51,25 @@ function withTimeout(promise, ms, label) {
                 promise,
                 new Promise((_, reject) => setTimeout(() => reject(new Error(label + ' timeout after ' + ms + 'ms')), ms))
         ]);
+}
+
+function readTransactionHistory(opts) {
+        return new Promise(resolve => {
+                if (typeof wallet.readTransactionHistory !== 'function') {
+                        resolve({
+                                error: 'wallet.readTransactionHistory is not exported',
+                                rows: []
+                        });
+                        return;
+                }
+
+                wallet.readTransactionHistory(opts, rows => {
+                        resolve({
+                                error: null,
+                                rows
+                        });
+                });
+        });
 }
 
 function waitForStorageReady(cb) {
@@ -362,10 +382,39 @@ test.serial('Gate 2: forged AA response becomes wallet-query-visible after netwo
 
         console.log('BH_GATE2_INSERTED_ROWS', JSON.stringify(aaRows));
         console.log('BH_GATE2_EMITTED_COUNT', emitted.length);
+        const triggerRows = await q(
+                'SELECT address FROM unit_authors WHERE unit=? ORDER BY address LIMIT 1',
+                [TARGET_TRIGGER_UNIT]
+        );
+
+        const triggerAddress = triggerRows.length ? triggerRows[0].address : null;
+
+        const historyResult = triggerAddress
+                ? await withTimeout(readTransactionHistory({
+                        address: triggerAddress,
+                        unit: TARGET_TRIGGER_UNIT,
+                        limit: 20
+                }), 15000, 'wallet.readTransactionHistory')
+                : { error: 'no trigger author', rows: [] };
+
+        const historyRows = Array.isArray(historyResult.rows) ? historyResult.rows : [];
+
+        const forgedHistoryRows = historyRows.filter(tx =>
+                tx &&
+                tx.unit === TARGET_TRIGGER_UNIT &&
+                tx.to_aa === true &&
+                tx.response &&
+                tx.response.indexOf('BH_GATE2_FAKE_WALLET_VISIBLE_AA_RESPONSE') >= 0
+        );
+
+        console.log('BH_GATE2_TRIGGER_ADDRESS_FOR_WALLET_HISTORY', triggerAddress);
         console.log('BH_GATE2_WALLET_EQUIVALENT_ROWS', JSON.stringify(walletRows));
         console.log('BH_GATE2_WALLET_FORGED_VISIBLE_COUNT', forgedWalletRows.length);
+        console.log('BH_GATE2_WALLET_HISTORY_ERROR', historyResult.error || null);
+        console.log('BH_GATE2_WALLET_HISTORY_ROWS', JSON.stringify(historyRows));
+        console.log('BH_GATE2_WALLET_HISTORY_FORGED_VISIBLE_COUNT', forgedHistoryRows.length);
 
-        const proven = (
+        const queryProven = (
                 networkResult &&
                 networkResult.sawHistoryRequest &&
                 !networkResult.err &&
@@ -374,20 +423,30 @@ test.serial('Gate 2: forged AA response becomes wallet-query-visible after netwo
                 forgedWalletRows.length > 0
         );
 
+        const historyProven = queryProven && forgedHistoryRows.length > 0;
+
         console.log('BH_RESULT', JSON.stringify({
-                ok: !proven,
-                status: proven
-                        ? 'gate2_wallet_query_visible_from_network_history'
-                        : 'gate2_wallet_query_not_visible_from_network_history',
+                ok: !historyProven,
+                status: historyProven
+                        ? 'gate2_wallet_transaction_history_visible_from_network_history'
+                        : (
+                                queryProven
+                                        ? 'gate2_wallet_query_visible_from_network_history'
+                                        : 'gate2_wallet_query_not_visible_from_network_history'
+                        ),
                 saw_light_get_history: !!(networkResult && networkResult.sawHistoryRequest),
                 network_error: networkResult ? networkResult.err : 'no network result',
                 inserted_rows: aaRows.length,
                 emitted_events: emitted.length,
-                wallet_forged_rows: forgedWalletRows.length
+                wallet_forged_rows: forgedWalletRows.length,
+                wallet_history_forged_rows: forgedHistoryRows.length
         }));
 
-        if (proven)
-                t.fail('Gate 2 proven: wallet-equivalent lookup sees forged AA response inserted through network light-history ingestion');
+        if (historyProven)
+                t.fail('Gate 2 proven: wallet transaction history sees forged AA response inserted through network light-history ingestion');
+
+        if (queryProven)
+                t.fail('Gate 2 query proven: wallet-equivalent lookup sees forged AA response inserted through network light-history ingestion');
 
         t.pass('Gate 2 not proven');
 });
