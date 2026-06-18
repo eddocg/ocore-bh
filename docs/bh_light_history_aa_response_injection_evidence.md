@@ -84,3 +84,34 @@ The forged response can set wallet-visible AA status fields:
 - Whether wallet UX presents responseVars directly to users in a way that changes user decisions.
 - Whether automated client logic reacts to aa_response events or responseVars.
 - Whether missing response_unit should be rejected for non-bounced AA responses or treated as untrusted metadata.
+
+
+## Gate 3: watched-AA downstream forwarding
+
+Test: test/bh_gate3_light_aa_response_forwarding_from_network_history.test.js
+
+Controlled target:
+
+fixture:      test/.testdata-bh_asset_rollback_persistent.test.js
+trigger_unit: BvD/g11loi9UMjpWHT3g9zA391rkQHBSjtD+cRHU92U=
+trigger addr: ZQFHJXFWT2OCEBXF26GFXJU4MPASWPJT
+AA address:   GAZXTJRNXT6YYMUOKN76RTZQ23NO223W
+
+Observed result:
+
+BH_RESULT {"ok":false,"status":"gate3_light_aa_response_forwarded_from_network_history","saw_light_get_history":true,"network_error":null,"inserted_rows":1,"emitted_events":1,"watch_rows":1,"predicate_hit":true,"forwarded_messages":1}
+
+Forwarded message:
+
+subject: light/aa_response
+trigger_unit: BvD/g11loi9UMjpWHT3g9zA391rkQHBSjtD+cRHU92U=
+aa_address: GAZXTJRNXT6YYMUOKN76RTZQ23NO223W
+bounced: 0
+response.info: BH_GATE3_FAKE_FORWARDABLE_AA_RESPONSE
+responseVars: bh_gate3_affects_ZQFHJXFWT2OCEBXF26GFXJU4MPASWPJT
+
+Impact demonstrated:
+
+A forged AA response injected by a controlled light-history provider is not only stored locally. It can also be forwarded by the node as light/aa_response to a light client that watches the AA/address.
+
+This shows downstream propagation of forged AA response metadata through normal light-client notification behavior.
