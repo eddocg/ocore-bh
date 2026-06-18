@@ -115,3 +115,38 @@ Impact demonstrated:
 A forged AA response injected by a controlled light-history provider is not only stored locally. It can also be forwarded by the node as light/aa_response to a light client that watches the AA/address.
 
 This shows downstream propagation of forged AA response metadata through normal light-client notification behavior.
+
+
+## Gate 4: wallet decision-field impact
+
+Test: test/bh_gate4_wallet_decision_fields_from_network_history.test.js
+
+Controlled target:
+
+fixture:      test/.testdata-bh_asset_rollback_persistent.test.js
+trigger_unit: BvD/g11loi9UMjpWHT3g9zA391rkQHBSjtD+cRHU92U=
+trigger addr: ZQFHJXFWT2OCEBXF26GFXJU4MPASWPJT
+AA address:   GAZXTJRNXT6YYMUOKN76RTZQ23NO223W
+
+Observed result:
+
+BH_RESULT {"ok":false,"status":"gate4_wallet_decision_fields_visible_from_network_history","saw_light_get_history":true,"network_error":null,"inserted_rows":1,"emitted_events":1,"wallet_forged_rows":1,"wallet_history_forged_rows":1,"wallet_decisions":1}
+
+Wallet decision fields exposed through wallet.readTransactionHistory():
+
+to_aa: true
+bounced: 0
+decision_status: filled
+release: approved
+settlement_reference: BH_FORGED_SETTLEMENT_REFERENCE
+consumer_decision: settle_or_release
+
+Impact demonstrated:
+
+The forged AA response is not only visible as raw metadata. It can control wallet-history fields that downstream consumers can reasonably interpret as AA success, settlement, or release state.
+
+This proves decision-affecting potential for consumers that rely on wallet.readTransactionHistory(), aa_response, light/aa_response, light/get_aa_responses, or light/get_aa_response_chain as trusted AA outcome sources.
+
+Boundary:
+
+This does not prove automatic funds movement by a production exchange or bot. It proves attacker-controlled AA outcome data reaches official wallet history and can drive a realistic decision predicate.
